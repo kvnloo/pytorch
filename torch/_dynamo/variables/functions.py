@@ -2639,6 +2639,18 @@ class SkipFunctionVariable(VariableTracker):
         *VariableTracker._nonvar_fields,
     }
 
+    def _get_builtin_self(
+        self, tx: "InstructionTranslatorBase"
+    ) -> VariableTracker | None:
+        if not hasattr(self.value, "__self__"):
+            return None
+        source = self.source and AttrSource(self.source, "__self__")
+        return VariableTracker.build(tx, self.value.__self__, source)
+
+    tp_members = {
+        "__self__": Member(_get_builtin_self, readonly_setter),
+    }
+
     def __init__(self, value: object, reason: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.value = value
@@ -4922,6 +4934,10 @@ class BoundBuiltinMethodVariable(VariableTracker):
 
     def python_type(self) -> type:
         return types.BuiltinMethodType
+
+    tp_members = {
+        "__self__": Member(lambda s, _: s.obj, readonly_setter),
+    }
 
     def hash_impl(self, tx: "InstructionTranslatorBase") -> tuple[int, bool]:
         # meth_hash: https://github.com/python/cpython/blob/e76aa128fe/Objects/methodobject.c#L319
