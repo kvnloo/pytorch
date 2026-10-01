@@ -686,8 +686,19 @@ class BuiltinVariable(BaseBuiltinVariable):
         source = self.source and AttrSource(self.source, "__name__")
         return VariableTracker.build(tx, self.fn.__name__, source)
 
+    def _builtin_get_self(
+        self: "BuiltinVariable", tx: "InstructionTranslatorBase"
+    ) -> "VariableTracker | None":
+        if not hasattr(self.fn, "__self__"):
+            return None
+        source = self.source and AttrSource(self.source, "__self__")
+        return VariableTracker.build(tx, self.fn.__self__, source)
+
     tp_getset = {
         "__name__": GetSet(_builtin_type_get_name, readonly_setter),
+    }
+    tp_members = {
+        "__self__": Member(_builtin_get_self, readonly_setter),
     }
 
     @classmethod
