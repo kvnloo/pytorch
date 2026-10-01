@@ -436,11 +436,9 @@ class UserDefinedClassVariable(UserDefinedVariable):
     @functools.cache
     def _constant_fold_classes() -> set[type[object]]:
         import decimal
-        import fractions
 
         return {
             decimal.Decimal,
-            fractions.Fraction,
             torch.device,
             torch.finfo,
             torch.iinfo,
