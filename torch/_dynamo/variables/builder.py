@@ -24,6 +24,7 @@ import contextlib
 import contextvars
 import copy
 import dataclasses
+import decimal
 import enum
 import functools
 import importlib.machinery
@@ -5621,6 +5622,10 @@ class SourcelessBuilder:
         ] = {}
         for t in common_constant_types:
             handlers[t] = lambda tx, value: ConstantVariable(value)
+        # Decimal values produced by a traced Decimal(...) constructor are
+        # immutable compile-time values, but sourced Decimal inputs should keep
+        # their existing object/guard behavior.
+        handlers[decimal.Decimal] = lambda tx, value: ConstantLikeVariable(value)
         handlers[set] = lambda tx, value: SetVariable(
             [create(tx, x) for x in value], mutation_type=ValueMutationNew()
         )
