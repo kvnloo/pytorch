@@ -540,6 +540,42 @@ class BaseUserFunctionVariable(VariableTracker):
             raise_type_error(tx, "__qualname__ must be set to a string object")
         store_attr_mutation(tx, self, "__qualname__", value)
 
+    def _set_code(
+        self,
+        tx: "InstructionTranslatorBase",
+        value: "VariableTracker | None",
+    ) -> None:
+        # Mirrors CPython func_set_code for the non-warning path. Deletion and
+        # non-code assignments are invalid, and the new code must require the
+        # same number of closure cells as the function already owns.
+        if value is None or value.python_type() is not types.CodeType:
+            raise_type_error(tx, "__code__ must be set to a code object")
+
+        new_code = value.as_python_constant()
+        closure = self._get_closure(tx)
+        if closure.is_constant_match(None):
+            nclosure = 0
+        elif isinstance(closure, variables.TupleVariable):
+            nclosure = len(closure.items)
+        else:
+            nclosure = len(closure.as_python_constant())
+
+        nfree = len(new_code.co_freevars)
+        if nclosure != nfree:
+            raise_value_error(
+                tx,
+                f"{self.get_name()}() requires a code object with {nclosure} free vars, not {nfree}",
+            )
+
+        # Functions synthesized inside the trace should immediately use the new
+        # code for later in-trace calls and are reconstructed from self.code.
+        # Existing Python functions must not be mutated during tracing; replay
+        # the attribute write after the compiled region instead.
+        if isinstance(self, NestedUserFunctionVariable):
+            self.code = value
+        else:
+            store_attr_mutation(tx, self, "__code__", value)
+
     def _get_annotations(self, tx: "InstructionTranslatorBase") -> VariableTracker:
         # func_get_annotations lazily creates and stores an empty dict. The dict
         # is a fresh value (ValueMutationNew), so it must carry no source.
@@ -598,7 +634,7 @@ class BaseUserFunctionVariable(VariableTracker):
                 "__code__",
                 source=lambda s: s.source and AttrSource(s.source, "__code__"),
             ),
-            unmodeled_setter,
+            _set_code,
         ),
         "__dict__": GetSet(
             lambda s, tx: s.get_dict_vt(tx),
