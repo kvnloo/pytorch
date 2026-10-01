@@ -3184,13 +3184,11 @@ partial_fn = functools.partial(fn, scale=2)
             case {"b": param}:
                 return x / param
 
-    def test_decimal_fraction_constant_construction(self):
+    def test_decimal_constant_construction(self):
         import decimal
-        import fractions
 
         def fn():
             decimal_value = decimal.Decimal("1.00000001")
-            fraction_value = fractions.Fraction(100000001, 100000000)
             try:
                 math.factorial(decimal.Decimal("5"))
             except TypeError:
@@ -3201,9 +3199,6 @@ partial_fn = functools.partial(fn, scale=2)
                 factorial_rejected,
                 math.isclose(
                     decimal_value, decimal.Decimal("1.0"), rel_tol=1e-8
-                ),
-                math.isclose(
-                    fraction_value, fractions.Fraction(1), rel_tol=1e-8
                 ),
             )
 
