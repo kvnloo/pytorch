@@ -2645,7 +2645,7 @@ class SkipFunctionVariable(VariableTracker):
         if not hasattr(self.value, "__self__"):
             return None
         source = self.source and AttrSource(self.source, "__self__")
-        return VariableTracker.build(tx, self.value.__self__, source)
+        return VariableTracker.build(tx, getattr(self.value, "__self__"), source)
 
     tp_members = {
         "__self__": Member(_get_builtin_self, readonly_setter),
