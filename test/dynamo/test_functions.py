@@ -7526,6 +7526,37 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
         x = torch.randn(4)
         self.assertEqual(fn(x), opt_fn(x))
 
+    def test_function_code_assignment(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            first = 1
+            second = 2
+
+            def src():
+                return first
+
+            def dst():
+                return second
+
+            dst.__code__ = src.__code__
+
+            def no_closure():
+                return 0
+
+            mismatch_raised = False
+            try:
+                no_closure.__code__ = src.__code__
+            except ValueError:
+                mismatch_raised = True
+
+            return dst(), mismatch_raised, x + 1
+
+        value, mismatch_raised, out = fn(torch.tensor(3))
+        # Replacing code does not replace closure cells: dst keeps its own cell.
+        self.assertEqual(value, 2)
+        self.assertTrue(mismatch_raised)
+        self.assertEqual(out, torch.tensor(4))
+
     def test_functional_compile(self):
         def get_torch_functional_functions():
             s = set()
