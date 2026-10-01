@@ -4365,6 +4365,13 @@ class UserDefinedObjectVariable(UserDefinedVariable):
 
             method = cls.__dict__[op]
 
+            # CPython's slot_tp_richcompare treats an explicitly blocked slot
+            # (for example, __eq__ = None) as present and attempts to call it.
+            # That raises TypeError rather than falling through to another
+            # comparison implementation or identity fallback.
+            if method is None:
+                raise_type_error(tx, "'NoneType' object is not callable")
+
             if isinstance(method, types.FunctionType):
                 resolved = self.resolve_type_attr(tx, op, method, source=None)
                 if resolved is not None:
