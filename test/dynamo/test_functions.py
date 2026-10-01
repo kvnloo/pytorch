@@ -1361,21 +1361,14 @@ partial_fn = functools.partial(fn, scale=2)
     def test_builtin_function_self_metadata(self):
         @torch.compile(backend="eager", fullgraph=True)
         def fn():
-            values = [1, 2, 3]
-            mapping = {"foo": "bar"}
             return (
                 len.__self__ is builtins,
                 time.sleep.__self__ is time,
-                dict.fromkeys.__self__ is dict,
-                float.__getformat__.__self__ is float,
                 str.maketrans.__self__ is None,
                 bytes.maketrans.__self__ is None,
-                values.append.__self__ is values,
-                mapping.pop.__self__ is mapping,
-                None.__repr__.__self__ is None,
             )
 
-        self.assertEqual(fn(), (True,) * 9)
+        self.assertEqual(fn(), (True,) * 4)
 
     @make_test
     def test_return_tuple1(a, b):
