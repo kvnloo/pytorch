@@ -6149,10 +6149,14 @@ class GraphModule(torch.nn.Module):
             def method(self, x):
                 return x + 1
 
+        def helper():
+            pass
+
         obj = Counter()
 
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
+            helper.known_attr = 7
             set_raised = False
             del_raised = False
             try:
@@ -6164,13 +6168,17 @@ class GraphModule(torch.nn.Module):
             except AttributeError:
                 del_raised = True
             return (
+                helper.known_attr,
                 set_raised,
                 del_raised,
                 hasattr(Counter.method, "pending_attr"),
                 x + 1,
             )
 
-        set_raised, del_raised, leaked_to_function, out = fn(torch.tensor(2))
+        known_attr, set_raised, del_raised, leaked_to_function, out = fn(
+            torch.tensor(2)
+        )
+        self.assertEqual(known_attr, 7)
         self.assertTrue(set_raised)
         self.assertTrue(del_raised)
         self.assertFalse(leaked_to_function)
