@@ -4935,10 +4935,6 @@ class BoundBuiltinMethodVariable(VariableTracker):
     def python_type(self) -> type:
         return types.BuiltinMethodType
 
-    tp_members = {
-        "__self__": Member(lambda s, _: s.obj, readonly_setter),
-    }
-
     def hash_impl(self, tx: "InstructionTranslatorBase") -> tuple[int, bool]:
         # meth_hash: https://github.com/python/cpython/blob/e76aa128fe/Objects/methodobject.c#L319
         try:
