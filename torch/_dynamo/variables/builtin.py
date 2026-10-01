@@ -697,9 +697,15 @@ class BuiltinVariable(BaseBuiltinVariable):
     tp_getset = {
         "__name__": GetSet(_builtin_type_get_name, readonly_setter),
     }
-    tp_members = {
-        "__self__": Member(_builtin_get_self, readonly_setter),
-    }
+
+    def tp_getattro_impl(
+        self, tx: "InstructionTranslatorBase", name: str
+    ) -> VariableTracker:
+        if name == "__self__":
+            result = self._builtin_get_self(tx)
+            if result is not None:
+                return result
+        return super().tp_getattro_impl(tx, name)
 
     @classmethod
     def create_with_source(cls, value: Any, source: Source) -> "BuiltinVariable":
