@@ -324,6 +324,44 @@ class TpRichcompareTests(torch._dynamo.test_case.TestCase):
 
         self._assert_all_cmp_equals(MyObj(), MyObj(), error_ops=self._ORDERING_OPS)
 
+    def test_user_defined_blocked_eq_ne_slots(self):
+        class Base:
+            def __eq__(self, other):
+                return True
+
+        class EqBlocked(Base):
+            __eq__ = None
+
+        class NeBlocked(Base):
+            __ne__ = None
+
+        class IndependentNeBlocked:
+            def __eq__(self, other):
+                return True
+
+            __ne__ = None
+
+        def check_raises(fn):
+            opt_fn = torch.compile(fn, backend="eager", fullgraph=True)
+            with self.assertRaisesRegex(TypeError, "'NoneType' object is not callable"):
+                opt_fn()
+            torch._dynamo.reset()
+
+        # A blocked subclass slot has reflected-comparison priority.
+        check_raises(lambda: Base() == EqBlocked())
+        check_raises(lambda: EqBlocked() == Base())
+        check_raises(lambda: Base() != NeBlocked())
+        check_raises(lambda: NeBlocked() != Base())
+        check_raises(lambda: IndependentNeBlocked() != Base())
+
+        # object.__ne__ on the left still delegates to Base.__eq__ before the
+        # unrelated right-hand blocked __ne__ slot is considered.
+        @torch.compile(backend="eager", fullgraph=True)
+        def fallback_works():
+            return Base() != IndependentNeBlocked()
+
+        self.assertFalse(fallback_works())
+
     def test_user_defined_cross_type(self):
         """UDOV vs constant and vs different UDOV — __eq__ returns NotImplemented,
         falls back to identity (False); ordering raises TypeError."""
