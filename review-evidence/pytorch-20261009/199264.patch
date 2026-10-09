@@ -1,0 +1,62 @@
+--- a/torch/_dynamo/variables/builtin.py
++++ b/torch/_dynamo/variables/builtin.py
+@@ -2499,13 +2499,13 @@
+                 if isinstance(arg, variables.UserMethodVariable)
+                 else types.FunctionType
+             )
+-            names = set(dir(obj_type))
+-            for key in arg.get_dict_vt(tx).unpack_var_sequence(tx):
+-                if key.is_python_constant():
+-                    name = key.as_python_constant()
+-                    if isinstance(name, str):
+-                        names.add(name)
+-            return VariableTracker.build(tx, sorted(names))
++            # Preserve all keys, including non-string keys: CPython sorts
++            # the merged dictionary and may raise TypeError. Do not silently
++            # drop symbolic keys or execute their comparisons at trace time.
++            names = arg.get_dict_vt(tx).call_method(tx, "copy", [], {})
++            class_names = VariableTracker.build(tx, dict.fromkeys(dir(obj_type)))
++            names.call_method(tx, "update", [class_names], {})
++            return BuiltinVariable(sorted).call_function(tx, [names], {})
+         # Enable specialized VTs for constants to work with dir()
+         if arg.is_python_constant():
+             return VariableTracker.build(tx, dir(arg.as_python_constant()))
+--- a/test/dynamo/test_functions.py
++++ b/test/dynamo/test_functions.py
+@@ -7555,6 +7555,36 @@
+         self.assertTrue(method_has_func)
+         self.assertEqual(out, torch.tensor(3))
+ 
++    def test_dir_function_pending_nonstring_key_raises(self):
++        def helper():
++            pass
++
++        @torch.compile(backend="eager", fullgraph=True)
++        def fn(x):
++            helper.__dict__[1] = "not an attribute name"
++            try:
++                dir(helper)
++            except TypeError:
++                return x + 1
++            return x - 1
++
++        self.assertEqual(fn(torch.tensor(2)), torch.tensor(3))
++
++    def test_dir_function_pending_deletion(self):
++        def helper():
++            pass
++
++        helper.pending_attr = 1
++
++        @torch.compile(backend="eager", fullgraph=True)
++        def fn(x):
++            del helper.pending_attr
++            return "pending_attr" in dir(helper), x + 1
++
++        present, result = fn(torch.tensor(2))
++        self.assertFalse(present)
++        self.assertEqual(result, torch.tensor(3))
++
+     def test_functional_compile(self):
+         def get_torch_functional_functions():
+             s = set()

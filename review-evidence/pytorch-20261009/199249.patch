@@ -1,0 +1,104 @@
+--- a/torch/_dynamo/variables/functions.py
++++ b/torch/_dynamo/variables/functions.py
+@@ -5207,27 +5207,6 @@
+         _check_descriptor_obj_type(tx, self.descriptor, obj)
+         name = self.descriptor.__name__
+ 
+-        # type.__doc__ has two useful error cases that are independent of the
+-        # value being assigned: deletion is always rejected, and immutable
+-        # static types reject writes. Model those without eagerly invoking the
+-        # C setter (which could mutate a user class at trace time).
+-        if self.descriptor is type.__dict__["__doc__"]:
+-            obj_value = obj.as_python_constant()
+-            if value is None:
+-                raise_type_error(
+-                    tx,
+-                    f"cannot delete '__doc__' attribute of immutable type "
+-                    f"'{obj_value.__name__}'",
+-                )
+-            # Py_TPFLAGS_IMMUTABLETYPE. Read through type's descriptor
+-            # so a custom metaclass cannot shadow __flags__ or run user code.
+-            if vars(type)["__flags__"].__get__(obj_value) & (1 << 8):
+-                raise_type_error(
+-                    tx,
+-                    f"cannot set '__doc__' attribute of immutable type "
+-                    f"'{obj_value.__name__}'",
+-                )
+-
+         entry = obj.lookup_tp_getset_member(name)
+         if entry is not None:
+             # A READONLY PyMemberDef is modeled by readonly_setter, which raises
+@@ -5304,6 +5283,24 @@
+     ) -> VariableTracker:
+         _check_descriptor_obj_type(tx, self.descriptor, obj)
+         name = self.descriptor.__name__
++
++        # type.__doc__ rejects deletion and writes to immutable types. Model
++        # only those error cases; never invoke its mutating C setter here.
++        if self.descriptor is type.__dict__["__doc__"]:
++            obj_value = obj.as_python_constant()
++            # Bypass metaclass overrides of __name__ and __flags__.
++            obj_name = vars(type)["__name__"].__get__(obj_value)
++            if value is None:
++                raise_type_error(
++                    tx,
++                    f"cannot delete '__doc__' attribute of immutable type '{obj_name}'",
++                )
++            if vars(type)["__flags__"].__get__(obj_value) & (1 << 8):
++                raise_type_error(
++                    tx,
++                    f"cannot set '__doc__' attribute of immutable type '{obj_name}'",
++                )
++
+         entry = obj.lookup_tp_getset_member(name)
+         if entry is None:
+             # No model for this getset. Dynamo cannot see whether the C setter
+--- a/test/dynamo/test_tp_getattro.py
++++ b/test/dynamo/test_tp_getattro.py
+@@ -604,21 +604,31 @@
+         class C:
+             pass
+ 
+-        def set_immutable_type():
+-            descr.__set__(list, "blah")
++        def set_immutable_type(x):
++            try:
++                descr.__set__(list, "blah")
++            except TypeError as exc:
++                return str(exc), x + 1
++            return "no error", x - 1
+ 
+-        def delete_mutable_type_doc():
+-            descr.__delete__(C)
++        def delete_mutable_type_doc(x):
++            try:
++                descr.__delete__(C)
++            except TypeError as exc:
++                return str(exc), x + 1
++            return "no error", x - 1
+ 
+-        with self.assertRaisesRegex(
+-            TypeError, "cannot set '__doc__' attribute of immutable type 'list'"
++        for fn, expected in (
++            (set_immutable_type, "cannot set '__doc__' attribute of immutable type 'list'"),
++            (delete_mutable_type_doc, "cannot delete '__doc__' attribute of immutable type 'C'"),
+         ):
+-            torch.compile(set_immutable_type, backend="eager", fullgraph=True)()
+-
+-        with self.assertRaisesRegex(
+-            TypeError, "cannot delete '__doc__' attribute of immutable type 'C'"
+-        ):
+-            torch.compile(delete_mutable_type_doc, backend="eager", fullgraph=True)()
++            with self.subTest(fn=fn.__name__):
++                message, result = torch.compile(fn, backend="eager", fullgraph=True)(
++                    torch.tensor(2)
++                )
++                self.assertEqual(message, expected)
++                self.assertEqual(result, torch.tensor(3))
++        self.assertIsNone(C.__doc__)
+ 
+     def test_property_setter(self):
+         class MyObj:
+diff --git a/test/dynamo_expected_failures/CPython313-test_descr-ClassPropertiesAndMethods.test_set_doc b/test/dynamo_expected_failures/CPython313-test_descr-ClassPropertiesAndMethods.test_set_doc
+new file mode 100644
+index 0000000..e69de29
