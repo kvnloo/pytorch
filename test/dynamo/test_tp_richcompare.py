@@ -1039,6 +1039,15 @@ class TpRichcompareTests(torch._dynamo.test_case.TestCase):
         )
 
     # =====================================================================
+    # PolyfilledFunctionVariable comparison
+    # =====================================================================
+
+    def test_polyfilled_function_cmp(self):
+        # sum is traced as a PolyfilledFunctionVariable.
+        self._assert_all_cmp_equals(sum, sum, error_ops=self._ORDERING_OPS)
+        self._assert_all_cmp_equals(sum, [].__add__, error_ops=self._ORDERING_OPS)
+
+    # =====================================================================
     # functools.partial comparison (identity-based)
     # =====================================================================
 

@@ -4249,33 +4249,9 @@ class PolyfilledFunctionVariable(VariableTracker):
     def tp_richcompare_impl(
         self, tx: "InstructionTranslatorBase", other: "VariableTracker", op: str
     ) -> "VariableTracker":
-        # wrapper_richcompare: method-wrapper equality is descriptor identity
-        # plus receiver identity. Ordering and non-wrapper operands return
-        # NotImplemented.
-        # https://github.com/python/cpython/blob/3.13/Objects/descrobject.c
-        from .descriptors import MethodWrapperVariable
+        from .object_protocol import python_constant_richcompare_impl
 
-        if op not in ("__eq__", "__ne__") or not isinstance(
-            other, MethodWrapperVariable
-        ):
-            return ConstantVariable.create(NotImplemented)
-
-        equal = self.descriptor is other.descriptor
-        if equal:
-            from .object_protocol import vt_identity_compare
-
-            same_receiver = vt_identity_compare(self.obj, other.obj)
-            if same_receiver is None:
-                unimplemented(
-                    gb_type="method-wrapper comparison with undecidable receiver",
-                    context=f"{self} {op} {other}",
-                    explanation="Dynamo cannot determine whether the two "
-                    "method-wrapper objects have the same receiver.",
-                    hints=[*graph_break_hints.SUPPORTABLE],
-                )
-            equal = same_receiver.as_python_constant()
-
-        return ConstantVariable.create(equal if op == "__eq__" else not equal)
+        return python_constant_richcompare_impl(self, tx, other, op)
 
     def tp_hash_impl(self, tx: "InstructionTranslatorBase") -> tuple[int, bool]:
         try:
