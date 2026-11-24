@@ -407,6 +407,20 @@ class MethodWrapperVariable(VariableTracker):  # noqa: RVT001
     def tp_richcompare_impl(
         self, tx: "InstructionTranslatorBase", other: "VariableTracker", op: str
     ) -> "VariableTracker":
+        # wrapper_richcompare: equal iff same descriptor and same receiver.
+        # https://github.com/python/cpython/blob/3.13/Objects/descrobject.c#L1310-L1331
+        # Constant-folding via as_python_constant() is wrong here because it
+        # rebuilds the receiver on every call, so `t.__add__ == t.__add__`
+        # would compare two different tuples.
+        if op in ("__eq__", "__ne__") and isinstance(other, MethodWrapperVariable):
+            if self.descriptor is not other.descriptor:
+                return ConstantVariable.create(op == "__ne__")
+            from .object_protocol import vt_identity_compare
+
+            same_receiver = vt_identity_compare(self.obj, other.obj)
+            if same_receiver is not None:
+                equal = same_receiver.as_python_constant()
+                return ConstantVariable.create(equal == (op == "__eq__"))
         from .object_protocol import python_constant_richcompare_impl
 
         return python_constant_richcompare_impl(self, tx, other, op)

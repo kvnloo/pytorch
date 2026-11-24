@@ -6633,6 +6633,45 @@ class GraphModule(torch.nn.Module):
         self.assertEqual(result[2:6], (True,) * 4)
         self.assertEqual(result[6], torch.tensor(3))
 
+    def test_method_wrapper_equality_receiver_identity(self):
+        # wrapper_richcompare: same descriptor and same receiver object.
+        captured = [1, 2]
+
+        def fn(x, arg):
+            values = [x]
+            const = (1, 2)
+            return (
+                values.__add__ == values.__add__,
+                values.__add__ != values.__add__,
+                values.__add__ == [x].__add__,
+                values.__add__ == values.__mul__,
+                const.__add__ == const.__add__,
+                captured.__add__ == captured.__add__,
+                captured.__add__ == arg.__add__,
+                arg.__add__ == arg.__add__,
+                x + 1,
+            )
+
+        x = torch.tensor(2)
+        arg = [1, 2]
+        expected = fn(x, arg)
+        result = torch.compile(fn, backend="eager", fullgraph=True)(x, arg)
+        self.assertEqual(result, expected)
+        self.assertEqual(
+            result[:8], (True, False, False, False, True, True, False, True)
+        )
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def ordering(x):
+            values = [x]
+            try:
+                ordered = values.__add__ < values.__add__
+            except TypeError:
+                return x + 1
+            return x - 1 if ordered else x - 2
+
+        self.assertEqual(ordering(x), torch.tensor(3))
+
     def test_method_vt_not_a_function_vt(self):
         """Methods must not subclass UserFunctionVariable (CPython parity).
 
