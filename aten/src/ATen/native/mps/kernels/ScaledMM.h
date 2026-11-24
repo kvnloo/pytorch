@@ -7,6 +7,8 @@ C10_METAL_CONSTEXPR uint32_t scaled_mm_threads =
     scaled_mm_simdgroups * c10::metal::simdgroup_size;
 // K, N, storage offsets and leading strides must be multiples of this
 C10_METAL_CONSTEXPR uint32_t scaled_mm_alignment = 16;
+// Output tile of the Metal 4.1 kernel, which reads fp8 operands natively
+C10_METAL_CONSTEXPR uint32_t scaled_mm_native_tile = 64;
 // Matrix A's max number of rows on which we dispatch few rows kernel
 // Higher values per-row ALU work outweighs streaming matrix B once.
 C10_METAL_CONSTEXPR uint32_t scaled_mm_few_rows_max = 4;
@@ -24,6 +26,8 @@ struct ScaledMMParams {
   index_t b_row_stride, b_col_stride;
   index_t out_row_stride, out_col_stride;
   bool rowwise;
+  // False for block-scaled recipes without a tensor-wise scale
+  bool has_tensor_scales;
   bool has_bias;
   bool bias_bfloat16;
 };
