@@ -572,12 +572,12 @@ class OutputSlotReleaseTest(TestCase):
 
 class StageTest(MultiProcContinuousTest):
     @classmethod
-    def backend_str(cls) -> str:
+    def backend_str(cls, device) -> str:
         # Testing with NCCL backend
         return backend
 
-    @classmethod
-    def device_type(cls) -> str:
+    @property
+    def device_type(self) -> str:
         return device_type
 
     @property
@@ -911,7 +911,11 @@ class StageTest(MultiProcContinuousTest):
             else:
                 schedule.step()
 
-        torch.nn.MSELoss(reduction="sum")(ref_mod(x), target).backward()
+        # Run the reference on the same microbatches as the schedule. A
+        # full-batch GEMM can round differently, and a single ReLU input that
+        # flips sign shifts many gradient elements past these tolerances.
+        for x_mb, target_mb in zip(x.chunk(chunks), target.chunk(chunks)):
+            torch.nn.MSELoss(reduction="sum")(ref_mod(x_mb), target_mb).backward()
         ref_stage = ref_mod.get_submodule(f"layers.{self.rank}")
         for name, parameter in stage_mod.named_parameters():
             self.assertEqual(
@@ -927,11 +931,11 @@ instantiate_parametrized_tests(StageTest)
 
 class StageNegativeTest(MultiProcContinuousTest):
     @classmethod
-    def backend_str(cls) -> str:
+    def backend_str(cls, device) -> str:
         return backend
 
-    @classmethod
-    def device_type(cls) -> str:
+    @property
+    def device_type(self) -> str:
         return device_type
 
     @property
