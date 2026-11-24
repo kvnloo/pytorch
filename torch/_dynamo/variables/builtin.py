@@ -2773,11 +2773,13 @@ class BuiltinVariable(TypeVariable):
             return VariableTracker.build(tx, dir(arg.fn))
         if isinstance(arg, TypeVariable):
             return VariableTracker.build(tx, dir(arg._fn))
-        if isinstance(arg, (variables.UserFunctionVariable, variables.UserMethodVariable)):
-            # Mirror CPython object.__dir__: copy the object's __dict__, then
-            # merge attributes reachable from its actual class hierarchy.
-            # For a bound method, __dict__ is forwarded to __func__ by
-            # method_getattro, but its class is still MethodType; seeding from
+        if isinstance(
+            arg, (variables.UserFunctionVariable, variables.UserMethodVariable)
+        ):
+            # Mirror CPython object.__dir__: copy getattr(obj, "__dict__"),
+            # then merge attributes reachable from its actual class hierarchy.
+            # For a bound method, method_getattro forwards __dict__ to
+            # __func__, but its class is still MethodType; seeding from
             # dir(the underlying function) would incorrectly expose
             # function-only names such as __code__.
             obj_type = (
@@ -2785,10 +2787,9 @@ class BuiltinVariable(TypeVariable):
                 if isinstance(arg, variables.UserMethodVariable)
                 else types.FunctionType
             )
-            # Preserve all keys, including non-string keys: CPython sorts
-            # the merged dictionary and may raise TypeError. Do not silently
-            # drop symbolic keys or execute their comparisons at trace time.
-            names = arg.get_dict_vt(tx).call_method(tx, "copy", [], {})
+            # Keep every key: CPython sorts the merged dict, so a non-string
+            # key in __dict__ makes dir() raise TypeError.
+            names = generic_getattr(tx, arg, "__dict__").call_method(tx, "copy", [], {})
             class_names = VariableTracker.build(tx, dict.fromkeys(dir(obj_type)))
             names.call_method(tx, "update", [class_names], {})
             return BuiltinVariable(sorted).call_function(tx, [names], {})

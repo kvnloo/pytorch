@@ -9359,7 +9359,9 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
                 x + 1,
             )
 
-        on_function, on_method, method_has_code, method_has_func, out = fn(torch.tensor(2))
+        on_function, on_method, method_has_code, method_has_func, out = fn(
+            torch.tensor(2)
+        )
         self.assertTrue(on_function)
         self.assertTrue(on_method)
         self.assertFalse(method_has_code)
@@ -9370,9 +9372,10 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
         def helper():
             pass
 
+        helper.__dict__[1] = "not an attribute name"
+
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
-            helper.__dict__[1] = "not an attribute name"
             try:
                 dir(helper)
             except TypeError:
