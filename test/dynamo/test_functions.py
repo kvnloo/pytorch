@@ -9366,6 +9366,36 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
         self.assertTrue(method_has_func)
         self.assertEqual(out, torch.tensor(3))
 
+    def test_dir_function_pending_nonstring_key_raises(self):
+        def helper():
+            pass
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            helper.__dict__[1] = "not an attribute name"
+            try:
+                dir(helper)
+            except TypeError:
+                return x + 1
+            return x - 1
+
+        self.assertEqual(fn(torch.tensor(2)), torch.tensor(3))
+
+    def test_dir_function_pending_deletion(self):
+        def helper():
+            pass
+
+        helper.pending_attr = 1
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            del helper.pending_attr
+            return "pending_attr" in dir(helper), x + 1
+
+        present, result = fn(torch.tensor(2))
+        self.assertFalse(present)
+        self.assertEqual(result, torch.tensor(3))
+
     def test_functional_compile(self):
         def get_torch_functional_functions():
             s = set()

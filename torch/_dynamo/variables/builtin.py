@@ -2785,13 +2785,13 @@ class BuiltinVariable(TypeVariable):
                 if isinstance(arg, variables.UserMethodVariable)
                 else types.FunctionType
             )
-            names = set(dir(obj_type))
-            for key in arg.get_dict_vt(tx).unpack_var_sequence(tx):
-                if key.is_python_constant():
-                    name = key.as_python_constant()
-                    if isinstance(name, str):
-                        names.add(name)
-            return VariableTracker.build(tx, sorted(names))
+            # Preserve all keys, including non-string keys: CPython sorts
+            # the merged dictionary and may raise TypeError. Do not silently
+            # drop symbolic keys or execute their comparisons at trace time.
+            names = arg.get_dict_vt(tx).call_method(tx, "copy", [], {})
+            class_names = VariableTracker.build(tx, dict.fromkeys(dir(obj_type)))
+            names.call_method(tx, "update", [class_names], {})
+            return BuiltinVariable(sorted).call_function(tx, [names], {})
         # Enable specialized VTs for constants to work with dir()
         if arg.is_python_constant():
             return VariableTracker.build(tx, dir(arg.as_python_constant()))
